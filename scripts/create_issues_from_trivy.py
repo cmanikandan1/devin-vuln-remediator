@@ -8,10 +8,15 @@ Usage:
     export GITHUB_REPO=superset
     python scripts/create_issues_from_trivy.py trivy-report.json
 
+Skips any CVE that already has an open or closed issue with the trigger
+label, so you can re-run safely (e.g. with MAX_ISSUES=1 for one-at-a-time
+end-to-end testing).
+
 Requires Issues enabled on the repo (GitHub Settings → Features → Issues).
 """
 import json
 import os
+import re
 import sys
 
 import httpx
@@ -29,6 +34,8 @@ HEADERS = {
 }
 API = "https://api.github.com"
 
+CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+
 
 def ensure_label() -> None:
     r = httpx.post(
@@ -38,6 +45,44 @@ def ensure_label() -> None:
     )
     if r.status_code not in (201, 422):  # 422 = already exists
         r.raise_for_status()
+
+
+def existing_cves() -> set[str]:
+    """Return the set of CVE IDs already filed as issues with the trigger label.
+
+    Looks at both open and closed issues so that re-runs don't refile the same
+    CVE. CVE ID is parsed from the issue title (which always contains it via
+    the title format `[Security] CVE-XXXX-YYYY in <pkg>`) and the body as a
+    fallback.
+    """
+    seen: set[str] = set()
+    page = 1
+    while True:
+        r = httpx.get(
+            f"{API}/repos/{GITHUB_OWNER}/{GITHUB_REPO}/issues",
+            headers=HEADERS,
+            params={
+                "labels": LABEL,
+                "state": "all",
+                "per_page": 100,
+                "page": page,
+            },
+        )
+        r.raise_for_status()
+        issues = r.json()
+        if not issues:
+            break
+        for issue in issues:
+            # Skip pull requests (the issues endpoint returns both)
+            if "pull_request" in issue:
+                continue
+            haystack = (issue.get("title") or "") + "\n" + (issue.get("body") or "")
+            for m in CVE_RE.findall(haystack):
+                seen.add(m.upper())
+        if len(issues) < 100:
+            break
+        page += 1
+    return seen
 
 
 def create_issue(title: str, body: str) -> dict:
@@ -103,15 +148,29 @@ def main():
         print("Usage: create_issues_from_trivy.py <trivy-report.json>")
         sys.exit(1)
     ensure_label()
+
+    already = existing_cves()
+    if already:
+        print(f"Found {len(already)} CVE(s) already filed — will skip those.")
+
     created = 0
+    skipped = 0
     for v in parse_trivy(sys.argv[1]):
         if created >= MAX_ISSUES:
             break
+        cve_upper = v["cve_id"].upper()
+        if cve_upper in already:
+            skipped += 1
+            continue
         title = f"[Security] {v['cve_id']} in {v['package']}"
         issue = create_issue(title, format_body(v))
         print(f"✔ Created issue #{issue['number']}: {title}")
         created += 1
-    print(f"\nDone. Created {created} issue(s).")
+        already.add(cve_upper)  # in case the same CVE appears again in the report
+
+    print(f"\nDone. Created {created} issue(s); skipped {skipped} already filed.")
+    if created == 0 and skipped > 0:
+        print("All findings in the report are already filed. Nothing to do.")
 
 
 if __name__ == "__main__":

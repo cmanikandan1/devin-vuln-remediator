@@ -155,34 +155,11 @@ If you see a red ✕, click the delivery to inspect the response. 401 means the 
 
 ---
 
-## Part 5 — Trigger ONE issue end-to-end (10 min)
+## Part 5 — Trigger ONE issue end-to-end (5 min)
 
-You have two ways to create the trigger issue. Pick one.
+You have two ways to create the trigger issue. **5.B is recommended** — less typing, picks a real CVE from your scan.
 
-### 5.A — Manually (recommended for first run)
-
-Your fork → Issues → **New issue**:
-
-**Title:** `[Security] CVE-2024-6345 in setuptools`
-
-**Body** (copy verbatim, then edit values to match a real CVE from your Trivy report):
-
-```
-**CVE ID:** CVE-2024-6345
-**Package:** setuptools
-**Current Version:** 65.5.0
-**Fixed Version:** 70.0.0
-**Severity:** HIGH
-**File:** requirements/base.txt
-```
-
-**Label:** `vuln-auto-remediate` (must already exist — created automatically by the script in 5.B, or add manually first via Issues → Labels → New)
-
-Submit.
-
-### 5.B — From your Trivy scan (one issue only)
-
-If you'd rather pull a real finding from your scan, cap the script to one issue:
+### 5.B — From your Trivy scan (recommended)
 
 ```bash
 cd ~/devin-vuln-remediator
@@ -193,6 +170,38 @@ MAX_ISSUES=1 python3 scripts/create_issues_from_trivy.py ~/trivy-report.json
 ```
 
 The script prints `✔ Created issue #N` once, then exits.
+
+**Re-running is safe.** The script queries GitHub for issues already labeled `vuln-auto-remediate`, parses their CVE IDs, and skips any CVE that already has an issue (open or closed). So a second run with `MAX_ISSUES=1` files the *next* unfiled CVE, not the same one. Output looks like:
+
+```
+Found 1 CVE(s) already filed — will skip those.
+✔ Created issue #2: [Security] CVE-2024-... in <package>
+Done. Created 1 issue(s); skipped 1 already filed.
+```
+
+If you've already filed every eligible finding:
+
+```
+All findings in the report are already filed. Nothing to do.
+```
+
+### 5.A — Manually (if you want full control over the title/body)
+
+A helper prints the markdown for you and copies it to the clipboard:
+
+```bash
+cd ~/devin-vuln-remediator
+export $(grep -v '^#' .env | xargs)
+python3 scripts/print_issue_body.py ~/trivy-report.json
+```
+
+Output is the title, body, and label name — body already on your clipboard. Open your fork → Issues → New issue, paste, set the title, add the `vuln-auto-remediate` label (Issues → Labels → New if it doesn't exist yet), and submit.
+
+Pass an index to pick a different finding:
+
+```bash
+python3 scripts/print_issue_body.py ~/trivy-report.json 3
+```
 
 ---
 
