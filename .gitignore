@@ -19,3 +19,6 @@ trivy-report.json
 .vscode/
 *.swp
 node_modules/
+
+docs/LOOM_SCRIPT.md
+docs/SLIDES.md
