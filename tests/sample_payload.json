@@ -1,0 +1,17 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 1,
+    "title": "[Security] CVE-2024-12345 in cryptography",
+    "body": "**CVE ID:** CVE-2024-12345\n**Package:** cryptography\n**Current Version:** 41.0.1\n**Fixed Version:** 42.0.4\n**Severity:** HIGH\n**File:** requirements/base.txt\n\nBuffer overflow in cryptography < 42.0.4 allows arbitrary code execution.",
+    "labels": [
+      {"name": "security"},
+      {"name": "vuln-auto-remediate"}
+    ],
+    "html_url": "https://github.com/YOUR_USERNAME/superset/issues/1"
+  },
+  "repository": {
+    "full_name": "YOUR_USERNAME/superset",
+    "html_url": "https://github.com/YOUR_USERNAME/superset"
+  }
+}

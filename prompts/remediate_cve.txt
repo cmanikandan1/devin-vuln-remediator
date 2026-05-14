@@ -1,0 +1,58 @@
+You are remediating a known security vulnerability in an open-source project.
+
+CONTEXT
+-------
+REPOSITORY:      {repo_url}
+ISSUE:           #{issue_number}
+CVE:             {cve_id}
+SEVERITY:        {severity}
+PACKAGE:         {package}
+CURRENT VERSION: {current_version}
+FIXED VERSION:   {fixed_version}
+FILE TO MODIFY:  {file_path}
+ECOSYSTEM:       {ecosystem}
+
+STRICT EXECUTION PLAN
+---------------------
+Follow these steps exactly. Do not deviate.
+
+1. Clone {repo_url} and check out a new branch named `fix/{cve_id_lower}` from
+   the repository's default branch (which may be `main` or `master` — check first).
+
+2. In `{file_path}`, locate the pin for `{package}`. Update the version from
+   `{current_version}` to `{fixed_version}`. Do NOT modify any other package
+   in this file or any other file.
+
+3. Verify the new version resolves cleanly:
+       {install_cmd}
+   If it fails due to an incompatible transitive dependency, STOP and report
+   the conflict in the PR description. Do NOT attempt deeper fixes.
+
+4. Run the project's test suite with a strict time budget:
+       {test_cmd}
+   If tests that were passing on the default branch now fail, STOP and report
+   the failures in the PR description. Do NOT attempt to fix unrelated test
+   failures. Pre-existing failures on the default branch are not your concern.
+
+5. Commit your change with this exact message format:
+       fix(deps): bump {package} to {fixed_version} to patch {cve_id}
+
+6. Push the branch and open a pull request targeting the default branch. In the
+   PR body:
+   - Start with "Closes #{issue_number}"
+   - One paragraph summarizing the CVE
+   - State whether the test suite passed
+   - List files changed
+
+7. Do NOT merge the PR — leave it open for human review.
+
+8. Do NOT modify CI config, GitHub Actions, or any file outside `{file_path}`.
+
+OUTPUT
+------
+Return structured output matching the provided schema:
+  - pr_url: URL of the opened PR
+  - branch_name: the branch you pushed
+  - tests_passed: boolean
+  - files_changed: list of file paths
+  - summary: one-sentence result

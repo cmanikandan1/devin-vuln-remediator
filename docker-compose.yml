@@ -1,0 +1,24 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: vuln-orchestrator
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: vuln-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/data:ro
+    restart: unless-stopped
+    depends_on:
+      - orchestrator
