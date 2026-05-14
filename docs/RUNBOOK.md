@@ -107,89 +107,127 @@ Verify:
 
 ---
 
-## Part 4 — Create issues from your Trivy scan (10 min)
+## Part 4 — Set up the webhook (15 min)
 
-In a second terminal:
+The webhook must be live **before** you create any issue, otherwise the orchestrator will never see it.
+
+### 4.1 Install ngrok
+
+```bash
+brew install ngrok/ngrok/ngrok
+ngrok config add-authtoken <your_ngrok_token>    # free signup at ngrok.com
+```
+
+Start the tunnel in its own terminal and leave it running:
+
+```bash
+ngrok http 8000
+```
+
+Note the forwarding URL (e.g. `https://abc123.ngrok.app`). Keep this terminal open.
+
+### 4.2 Generate a webhook secret
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Paste into `.env` as `GITHUB_WEBHOOK_SECRET=...` and restart so it's loaded:
+
+```bash
+docker compose down && docker compose up --build
+```
+
+### 4.3 Configure the GitHub webhook
+
+Your fork → Settings → Webhooks → **Add webhook**:
+- Payload URL: `https://<your-ngrok>.ngrok.app/webhook/github`
+- Content type: `application/json`
+- Secret: paste the same value from `.env`
+- Events: "Let me select individual events" → check **Issues** only
+- Active: ✅
+
+Save. GitHub immediately fires a `ping` event. Confirm:
+- ngrok terminal shows `POST /webhook/github 202`
+- GitHub UI: webhook page → Recent Deliveries → green checkmark
+
+If you see a red ✕, click the delivery to inspect the response. 401 means the secret doesn't match.
+
+---
+
+## Part 5 — Trigger ONE issue end-to-end (10 min)
+
+You have two ways to create the trigger issue. Pick one.
+
+### 5.A — Manually (recommended for first run)
+
+Your fork → Issues → **New issue**:
+
+**Title:** `[Security] CVE-2024-6345 in setuptools`
+
+**Body** (copy verbatim, then edit values to match a real CVE from your Trivy report):
+
+```
+**CVE ID:** CVE-2024-6345
+**Package:** setuptools
+**Current Version:** 65.5.0
+**Fixed Version:** 70.0.0
+**Severity:** HIGH
+**File:** requirements/base.txt
+```
+
+**Label:** `vuln-auto-remediate` (must already exist — created automatically by the script in 5.B, or add manually first via Issues → Labels → New)
+
+Submit.
+
+### 5.B — From your Trivy scan (one issue only)
+
+If you'd rather pull a real finding from your scan, cap the script to one issue:
 
 ```bash
 cd ~/devin-vuln-remediator
 python3 -m venv .venv && source .venv/bin/activate
 pip install httpx
 export $(grep -v '^#' .env | xargs)
-python3 scripts/create_issues_from_trivy.py ~/trivy-report.json
+MAX_ISSUES=1 python3 scripts/create_issues_from_trivy.py ~/trivy-report.json
 ```
 
-Should print `✔ Created issue #N` five times. Check your fork — five real GitHub issues with the trigger label.
+The script prints `✔ Created issue #N` once, then exits.
 
 ---
 
-## Part 5 — Set up the real webhook (15 min)
+## Part 6 — Watch the pipeline (5–10 min)
 
-This is the demo path. Skip the curl simulator entirely.
+Within seconds of issue creation:
 
-### 5.1 Install ngrok
+1. **GitHub webhook fires** — Recent Deliveries shows a fresh 202
+2. **ngrok terminal** — `POST /webhook/github 202`
+3. **Orchestrator logs** (`docker compose logs -f orchestrator`):
+   ```
+   Launched Devin v3 session devin-... for issue #N (CVE-2024-...)
+   ```
+4. **Devin UI** — new session appears under your service user, status `running`
+5. **Dashboard** (`http://localhost:8501`) — new row, status `pending` → `running`
+
+Then 5–10 minutes pass while Devin clones, edits, tests, and pushes:
+
+6. **Devin session** reaches terminal state — `status_detail: finished`
+7. **A new PR** appears in your fork, branch `fix/cve-2024-...`
+8. **The original issue** gets a 🤖 comment from the bot with the PR link
+9. **Dashboard** flips the row to `completed`, MTTR column populates
+
+If the session ends up `waiting_for_user` or `waiting_for_approval`, the dashboard shows a yellow "needs attention" warning — open the Devin UI session and resolve.
+
+### Verifying success
 
 ```bash
-brew install ngrok/ngrok/ngrok
-ngrok config add-authtoken <your_ngrok_token>    # free signup at ngrok.com
-ngrok http 8000
+# Should show one row with status=completed
+curl -s http://localhost:8000/sessions | python3 -m json.tool
 ```
 
-Note the forwarding URL (e.g. `https://abc123.ngrok.app`).
+### To run a second issue
 
-### 5.2 Generate webhook secret
-
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Paste into `.env` as `GITHUB_WEBHOOK_SECRET=...` and restart:
-
-```bash
-docker compose down && docker compose up --build
-```
-
-### 5.3 Configure GitHub webhook
-
-Your fork → Settings → Webhooks → Add webhook:
-- Payload URL: `https://<your-ngrok>.ngrok.app/webhook/github`
-- Content type: `application/json`
-- Secret: paste the same value from `.env`
-- Events: select "Let me select individual events" → check **Issues** only
-- Active: checked
-
-Save. GitHub fires a ping — ngrok terminal shows the hit.
-
----
-
-## Part 6 — End-to-end test (10 min)
-
-Create a new issue in your Superset fork:
-
-**Title:** `[Security] CVE-2024-XXXXX in <package>`
-
-**Body:**
-```
-**CVE ID:** CVE-2024-XXXXX
-**Package:** <package_name>
-**Current Version:** <current>
-**Fixed Version:** <fixed>
-**Severity:** HIGH
-**File:** requirements/base.txt
-```
-
-**Label:** `vuln-auto-remediate`
-
-Submit. Within seconds:
-- Orchestrator logs show the webhook
-- Devin v3 session starts (visible in Devin UI)
-- Dashboard shows a new row
-
-Wait 5–10 minutes:
-- Devin session reaches `blocked` or `finished`
-- A new PR appears in your fork
-- The original issue gets a 🤖 comment with the PR link
-- Dashboard flips to `completed` with the MTTR populated
+Just create another GitHub issue with the trigger label. The webhook is still live, the orchestrator is still up, and idempotency keys off `(issue_number, cve_id)` so duplicates are safe.
 
 ---
 
