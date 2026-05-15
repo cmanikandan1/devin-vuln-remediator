@@ -22,8 +22,12 @@ def parse_issue_body(body: str) -> dict:
         m = _FIELD_RE.match(line.strip())
         if m:
             key = m.group(1).strip().lower().replace(" ", "_")
-            # Strip any trailing ** if the value itself ends in bold markers
-            val = m.group(2).strip().rstrip("*").strip()
+            # Strip surrounding ** if the value has bold markers on either side
+            val = m.group(2).strip()
+            if val.startswith("**"):
+                val = val[2:].lstrip()
+            if val.endswith("**"):
+                val = val[:-2].rstrip()
             raw[key] = val
     return {
         "cve_id":          raw.get("cve_id") or raw.get("cve"),
