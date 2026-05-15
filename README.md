@@ -1,6 +1,6 @@
 # 🛡️ Devin Vulnerability Remediator
 
-**An event-driven automation that autonomously remediates dependency-level CVEs in Apache Superset, powered by the Devin v3 API.**
+**An event-driven automation that autonomously remediates dependency-level CVEs at scale — many Devins working in parallel, dispatched via webhooks, surfaced on a live dashboard.**
 
 ---
 
@@ -9,6 +9,8 @@
 Apache Superset — like any large open-source project — carries dozens of open CVE-related issues at any time. Each fix is small (a version bump, a PR, a review) but collectively they consume hours of senior engineering time per week. Yet unpatched dependencies remain the #1 source of real-world security incidents in web applications.
 
 This is **knowledge work**: read alert → check dep tree → confirm fix → run tests → open PR. The investigate-then-act loop that consumes ~30% of senior engineering time across most orgs.
+
+**The hiring problem:** at high CVE volume, you can't scale by hiring. A team of 5 engineers can fix 5 CVEs in parallel; a team of 50 Devins can fix 50. The unit economics flip when the cost-per-task drops by 10×.
 
 ## The solution
 
@@ -108,6 +110,15 @@ ngrok http 8000
 ```
 
 Now create a GitHub issue in your fork with the `vuln-auto-remediate` label. Watch the dashboard light up.
+
+### See parallelism in action — fire 5 issues at once
+
+```bash
+export $(grep -v '^#' .env | xargs)
+python3 scripts/scale_demo.py 5 --synthetic
+```
+
+Five GitHub issues open within ~1 second, the orchestrator launches five Devin sessions concurrently, and the dashboard's concurrency timeline shows five overlapping bars. **This is the autonomy-at-scale story** — many agents, one pipeline, no extra engineers.
 
 ### Auto-create issues from a Trivy scan
 
@@ -209,12 +220,13 @@ This template is versioned independently from orchestration code. Prompt iterati
 
 | Tile | Answers |
 |---|---|
-| **Active Sessions** | Is the system currently doing work? |
+| **Active Now** | Are Devins working right now? |
+| **Peak Concurrency** | How many ran simultaneously at the busiest moment? — the scale story |
 | **Completed PRs** | How much work has it shipped? |
-| **Success Rate** | How often does it succeed unattended? |
+| **Hours Saved** | Hours of senior engineering time reclaimed |
 | **Avg MTTR** | How fast is it compared to humans? |
 
-Each session row links to the Devin session URL and the GitHub PR. The orchestrator also emits structured JSON logs on every state transition — pipe these into Datadog/CloudWatch in production.
+The **concurrency timeline** (Gantt chart) shows overlapping bars — visual proof that many Devins are working in parallel, not just one at a time. Each session row links to the Devin session URL and the GitHub PR.
 
 ---
 

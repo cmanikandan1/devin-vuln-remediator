@@ -155,53 +155,65 @@ If you see a red ✕, click the delivery to inspect the response. 401 means the 
 
 ---
 
-## Part 5 — Trigger ONE issue end-to-end (5 min)
+## Part 5 — Trigger issues end-to-end (5 min)
 
-You have two ways to create the trigger issue. **5.B is recommended** — less typing, picks a real CVE from your scan.
+Three flows. **5.0 is the demo flow** — it's the one that proves autonomy at scale.
 
-### 5.B — From your Trivy scan (recommended)
+### 5.0 — PARALLEL DEMO: fire N issues at once (recommended for demos)
+
+This is what makes the autonomy story land. One command opens N GitHub issues *simultaneously*, GitHub fires N webhooks back-to-back, and you watch N Devins working in parallel on the timeline.
 
 ```bash
 cd ~/devin-vuln-remediator
 python3 -m venv .venv && source .venv/bin/activate
 pip install httpx
 export $(grep -v '^#' .env | xargs)
-MAX_ISSUES=1 python3 scripts/create_issues_from_trivy.py ~/trivy-report.json
+
+# 5 real CVEs from your Trivy report, fired in parallel
+python3 scripts/scale_demo.py 5 --report ~/trivy-report.json
+
+# OR — built-in synthetic CVEs (works without a Trivy report)
+python3 scripts/scale_demo.py 5 --synthetic
 ```
 
-The script prints `✔ Created issue #N` once, then exits.
-
-**Re-running is safe.** The script queries GitHub for issues already labeled `vuln-auto-remediate`, parses their CVE IDs, and skips any CVE that already has an issue (open or closed). So a second run with `MAX_ISSUES=1` files the *next* unfiled CVE, not the same one. Output looks like:
+The script uses a thread pool to POST issues concurrently, so all 5 land within ~1 second. Output:
 
 ```
-Found 1 CVE(s) already filed — will skip those.
-✔ Created issue #2: [Security] CVE-2024-... in <package>
-Done. Created 1 issue(s); skipped 1 already filed.
+🚀 Firing 5 issues in parallel (10 workers)...
+  ✔ #12  CVE-2024-...           cryptography
+  ✔ #13  CVE-2024-...           urllib3
+  ✔ #14  CVE-2024-...           jinja2
+  ✔ #15  CVE-2024-...           lodash
+  ✔ #16  CVE-2024-...           axios
+✅ 5 issues filed in 0.8s.
 ```
 
-If you've already filed every eligible finding:
+Then watch:
+- **Dashboard** (`http://localhost:8501`) — 5 bars on the concurrency timeline, all overlapping. "Peak Concurrency" jumps to 5.
+- **ngrok terminal** — 5 `POST /webhook/github 202` lines back-to-back
+- **Devin UI** — 5 sessions running simultaneously
+- **GitHub** — 5 PRs open within 5–10 minutes
 
-```
-All findings in the report are already filed. Nothing to do.
-```
+The "Hours Saved" KPI goes up by ~2.5 hours (5 × 30 min human estimate) once they complete.
 
-### 5.A — Manually (if you want full control over the title/body)
+### 5.A — Single issue, manually
 
 A helper prints the markdown for you and copies it to the clipboard:
 
 ```bash
-cd ~/devin-vuln-remediator
 export $(grep -v '^#' .env | xargs)
 python3 scripts/print_issue_body.py ~/trivy-report.json
 ```
 
-Output is the title, body, and label name — body already on your clipboard. Open your fork → Issues → New issue, paste, set the title, add the `vuln-auto-remediate` label (Issues → Labels → New if it doesn't exist yet), and submit.
+Output is the title, body, and label name — body already on your clipboard. Open your fork → Issues → New issue, paste, set the title, add the `vuln-auto-remediate` label, submit.
 
-Pass an index to pick a different finding:
+### 5.B — Single issue from your Trivy scan
 
 ```bash
-python3 scripts/print_issue_body.py ~/trivy-report.json 3
+MAX_ISSUES=1 python3 scripts/create_issues_from_trivy.py ~/trivy-report.json
 ```
+
+Re-running is safe — already-filed CVEs are skipped automatically.
 
 ---
 
