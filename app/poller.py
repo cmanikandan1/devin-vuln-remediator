@@ -33,13 +33,24 @@ async def _poll_once() -> None:
             log.error("Failed to fetch v3 session %s: %s", session_id, e)
             continue
 
+        # Always check for PRs first — Devin often finishes the task and then
+        # idles in `waiting_for_user` without self-terminating. If a PR exists,
+        # the job is done regardless of session status.
+        pr_url = devin_client.extract_pr_url(session)
+        if pr_url:
+            db.update_status(session_id, "completed", pr_url=pr_url)
+            log.info("Session %s completed. PR: %s", session_id, pr_url)
+            _notify_github(row, pr_url=pr_url, success=True)
+            continue
+
         # Check if session needs human attention (waiting_for_user / waiting_for_approval)
+        # Only treat as blocked if no PR was produced (checked above).
         if devin_client.needs_attention(session):
             status_detail = session.get("status_detail", "unknown")
             if row["status"] != "blocked":
                 db.update_status(session_id, "blocked",
                                  error_message=f"Session needs attention: {status_detail}")
-                log.warning("Session %s needs attention: %s", session_id, status_detail)
+                log.warning("Session %s needs attention (no PR yet): %s", session_id, status_detail)
             continue
 
         if not devin_client.is_done(session):
@@ -48,22 +59,17 @@ async def _poll_once() -> None:
                 db.update_status(session_id, "running")
             continue
 
-        pr_url = devin_client.extract_pr_url(session)
-        if pr_url and devin_client.is_successful(session):
-            db.update_status(session_id, "completed", pr_url=pr_url)
-            log.info("Session %s completed. PR: %s", session_id, pr_url)
-            _notify_github(row, pr_url=pr_url, success=True)
-        else:
-            status = session.get("status", "unknown")
-            status_detail = session.get("status_detail", "")
-            db.update_status(
-                session_id,
-                "failed",
-                error_message=f"Session ended (status={status}, detail={status_detail}) without producing a PR",
-            )
-            log.warning("Session %s ended without PR (status=%s, detail=%s)",
-                        session_id, status, status_detail)
-            _notify_github(row, pr_url=None, success=False)
+        # Session reached a terminal state without a PR
+        status = session.get("status", "unknown")
+        status_detail = session.get("status_detail", "")
+        db.update_status(
+            session_id,
+            "failed",
+            error_message=f"Session ended (status={status}, detail={status_detail}) without producing a PR",
+        )
+        log.warning("Session %s ended without PR (status=%s, detail=%s)",
+                    session_id, status, status_detail)
+        _notify_github(row, pr_url=None, success=False)
 
 
 def _notify_github(session_row: dict, *, pr_url: str | None, success: bool) -> None:
