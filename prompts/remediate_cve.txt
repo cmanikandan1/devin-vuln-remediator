@@ -12,6 +12,13 @@ FIXED VERSION:   {fixed_version}
 FILE TO MODIFY:  {file_path}
 ECOSYSTEM:       {ecosystem}
 
+AUTHENTICATION
+--------------
+A GitHub Personal Access Token with push access is available as the
+environment variable GITHUB_PAT. Use it for git operations:
+    git remote set-url origin https://x-access-token:${{GITHUB_PAT}}@github.com/{github_owner}/{github_repo}.git
+Do NOT ask the user for credentials — use GITHUB_PAT directly.
+
 STRICT EXECUTION PLAN
 ---------------------
 Follow these steps exactly. Do not deviate.

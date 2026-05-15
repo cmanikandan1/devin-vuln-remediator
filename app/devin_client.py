@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 DEVIN_API_BASE = os.getenv("DEVIN_API_BASE", "https://api.devin.ai/v3")
 DEVIN_API_KEY = os.getenv("DEVIN_API_KEY")
 DEVIN_ORG_ID = os.getenv("DEVIN_ORG_ID")
+GITHUB_TOKEN_FOR_DEVIN = os.getenv("GITHUB_TOKEN")  # Injected into Devin's VM as a session secret
 
 # Belt-and-braces: we read PR URLs from `pull_requests` natively, but also
 # ask Devin to emit a structured output as a fallback.
@@ -83,6 +84,14 @@ def create_session(
     }
     if repos:
         payload["repos"] = repos
+
+    # Inject GitHub token as a session secret so Devin can push branches
+    # and open PRs without the GitHub Integration being installed.
+    # If the integration IS installed, Devin uses that instead (preferred).
+    if GITHUB_TOKEN_FOR_DEVIN:
+        payload["session_secrets"] = [
+            {"key": "GITHUB_PAT", "value": GITHUB_TOKEN_FOR_DEVIN, "sensitive": True}
+        ]
 
     log.info("Creating v3 Devin session: %s (max_acu=%s)", title, max_acu_limit)
     with httpx.Client(timeout=30.0) as client:

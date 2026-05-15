@@ -48,4 +48,6 @@ def build_prompt(fields: dict, *, issue_number: int, repo_url: str) -> str:
         ecosystem=ecosystem,
         install_cmd=install_cmd,
         test_cmd=test_cmd,
+        github_owner=os.getenv("GITHUB_OWNER", ""),
+        github_repo=os.getenv("GITHUB_REPO", ""),
     )
